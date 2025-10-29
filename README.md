@@ -38,8 +38,8 @@ sudo dnf install python3 python3-pip tesseract
 
 ### Clone & Setup
 ```bash
-git clone https://github.com/yourusername/sorty-sorty.git
-cd sorty-sorty
+git clone https://github.com/BeanieMen/SortySorty.git
+cd SortySorty
 python -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -89,8 +89,13 @@ my-photos/
 Add profile photos for known people.
 
 ```bash
-python cli.py add-person "Jane Doe" jane1.jpg jane2.jpg
+python cli.py add-person -n "Jane Doe" -i jane1.jpg -i jane2.jpg
 ```
+
+**Options:**
+- `-n, --name` — Person's name (required)
+- `-i, --images` — Image files (specify multiple times, required)
+- `-p, --profiles` — Profiles directory
 
 ---
 
@@ -104,11 +109,14 @@ python cli.py scan [OPTIONS]
 **Options:**
 - `-i, --input` — Override input folder from config
 - `-o, --output` — Override output folder from config
+- `-c, --config` — Path to config file
 - `-p, --profiles` — Profiles directory (default: `profiles/`)
 - `-t, --threshold` — Match threshold (default: 0.6)
 - `--parallel` — Enable parallel processing
 - `--concurrency` — Worker count (default: 3)
-- `--delete-duplicates` — Remove duplicates
+- `--max-dimension` — Maximum image dimension in pixels (default: 1600)
+- `--delete-duplicates` — Delete duplicate photos instead of skipping
+- `--rename-timestamp` — Rename photos with timestamp
 - `--no-clustering` — Skip DBSCAN grouping
 - `-v, --verbose` — Show detailed timing
 
@@ -127,11 +135,13 @@ python cli.py scan -i photos -o sorted --parallel
 Auto-learn from high-confidence matches.
 
 ```bash
-python cli.py learn output/report.json [OPTIONS]
+python cli.py learn -r output/report.json [OPTIONS]
 ```
 
 **Options:**
-- `--min-similarity` — Minimum similarity for learning (default: 0.6)
+- `-r, --report` — Path to scan report JSON (required)
+- `-s, --min-similarity` — Minimum similarity for learning (default: 0.6)
+- `-p, --profiles` — Profiles directory
 - `--dry-run` — Show actions without applying changes
 
 ---
@@ -140,8 +150,11 @@ python cli.py learn output/report.json [OPTIONS]
 Show summary statistics from the last scan.
 
 ```bash
-python cli.py stats --output ./sorted
+python cli.py stats -o ./sorted
 ```
+
+**Options:**
+- `-o, --output` — Output directory with report (required)
 
 ---
 
@@ -188,12 +201,14 @@ src/
 │   └── string.py
 ├── services/         # Core logic
 │   ├── face_service.py
+│   ├── embedding_cache.py
 │   ├── ocr_service.py
+│   ├── file_service.py
 │   ├── cluster_service.py
 │   └── scan_service.py
-└── commands/         # CLI commands
-    ├── scan.py
-    └── learn.py
+├── commands/         # CLI commands
+│   └── learn.py
+└── config.py         # Config manager
 ```
 
 ---
@@ -244,4 +259,4 @@ src/
 ## 🤝 Contributing
 
 Pull requests and suggestions are welcome!  
-Submit an issue or PR at: [github.com/yourusername/sorty-sorty](https://github.com/yourusername/sorty-sorty)
+Submit an issue or PR at: [github.com/BeanieMen/SortySorty](https://github.com/BeanieMen/SortySorty)
