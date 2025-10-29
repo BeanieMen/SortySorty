@@ -42,7 +42,3 @@ playground
 
 *.log
 .DS_Store
-
-# Keep structure
-!playground/profiles/.gitkeep
-!playground/photos/.gitkeep

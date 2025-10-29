@@ -52,6 +52,8 @@ pip install -r requirements.txt
 `sorty-sorty.config.json`:
 ```json
 {
+  "inputDir": "photos",
+  "outputDir": "output",
   "threshold": 0.6,
   "lowConfidenceThreshold": 0.5,
   "maxDimension": 1600,
@@ -93,15 +95,15 @@ python cli.py add-person "Jane Doe" jane1.jpg jane2.jpg
 ---
 
 ### `scan`
-Scan and organize photos.
+Scan and organize photos. Reads input/output from config by default.
 
 ```bash
-python cli.py scan -i photos -o output [OPTIONS]
+python cli.py scan [OPTIONS]
 ```
 
 **Options:**
-- `-i, --input` — Input folder (required)
-- `-o, --output` — Output folder (required)
+- `-i, --input` — Override input folder from config
+- `-o, --output` — Override output folder from config
 - `-p, --profiles` — Profiles directory (default: `profiles/`)
 - `-t, --threshold` — Match threshold (default: 0.6)
 - `--parallel` — Enable parallel processing
@@ -112,7 +114,11 @@ python cli.py scan -i photos -o output [OPTIONS]
 
 **Example:**
 ```bash
-python cli.py scan -i photos -o sorted --parallel -v
+# Uses config for input/output
+python cli.py scan --parallel -v
+
+# Override input/output
+python cli.py scan -i photos -o sorted --parallel
 ```
 
 ---
@@ -163,20 +169,6 @@ output/
 | 0.50–0.60   | Ambiguous           | Flagged for review          |
 | < 0.50      | Unknown Face        | Moved to `unknown/` folder  |
 
----
-
-## ⚡ Performance
-
-| Optimization | Description |
-|---------------|-------------|
-| **Embedding Cache** | 94× faster after first run |
-| **Parallel Mode** | 40% faster for large sets |
-| **Image Downscaling** | Max 1600px width/height |
-| **No Cloud** | 100% local processing |
-
-**Example:**
-- First run (cache build): ~6s per profile  
-- Cached run: ~0.07s load time
 
 ---
 
@@ -248,11 +240,6 @@ src/
 
 ---
 
-## 🙏 Credits
-
-Originally based on the TypeScript version of **Sorty Sorty**, now rewritten in **Python** for better performance and native ML support.
-
----
 
 ## 🤝 Contributing
 

@@ -41,13 +41,9 @@ def init(directory: str):
     ensure_directory(photos_dir)
     ensure_directory(output_dir)
     
-    # Create .gitkeep files
-    (profiles_dir / ".gitkeep").touch()
-    (photos_dir / ".gitkeep").touch()
-    
     # Create default config
     config = ConfigManager.create_default(base_dir)
-    config_path = base_dir / "sorter-sorter.config.json"
+    config_path = base_dir / "sorty-sorty.config.json"
     ConfigManager.save(config, config_path)
     
     console.print(f"✓ Created directories:")
@@ -58,12 +54,12 @@ def init(directory: str):
     console.print("\n[bold yellow]Next steps:[/bold yellow]")
     console.print("1. Add profile photos to profiles/person-name/")
     console.print("2. Add photos to sort to photos/")
-    console.print("3. Run: sorty-sorty scan --input photos --output output")
+    console.print("3. Run: [bold cyan]python cli.py scan[/bold cyan]")
 
 
 @cli.command()
-@click.option('--input', '-i', 'input_dir', required=True, type=click.Path(exists=True), help="Input directory containing photos")
-@click.option('--output', '-o', 'output_dir', required=True, type=click.Path(), help="Output directory for sorted photos")
+@click.option('--input', '-i', 'input_dir', type=click.Path(exists=True), help="Input directory containing photos")
+@click.option('--output', '-o', 'output_dir', type=click.Path(), help="Output directory for sorted photos")
 @click.option('--config', '-c', 'config_path', type=click.Path(exists=True), help="Path to config file")
 @click.option('--threshold', '-t', type=float, help="Face matching threshold (0.0-1.0)")
 @click.option('--profiles', '-p', type=click.Path(exists=True), help="Profiles directory")
@@ -74,33 +70,30 @@ def init(directory: str):
 @click.option('--delete-duplicates', is_flag=True, help="Delete duplicate photos instead of skipping")
 @click.option('--rename-timestamp', is_flag=True, help="Rename photos with timestamp")
 @click.option('--no-clustering', is_flag=True, help="Disable clustering of unknown faces")
-def scan(input_dir: str, output_dir: str, config_path: str | None = None, threshold: float | None = None, 
+def scan(input_dir: str | None = None, output_dir: str | None = None, config_path: str | None = None, threshold: float | None = None, 
          profiles: str | None = None, verbose: bool = False, parallel: bool = False, 
          concurrency: int | None = None, max_dimension: int | None = None, 
          delete_duplicates: bool = False, rename_timestamp: bool = False, no_clustering: bool = False):
     """Scan and organize photos from input directory."""
-    input_path = Path(input_dir).resolve()
-    output_path = Path(output_dir).resolve()
     
-    # Load or create config
+    # Check for config file
     if config_path:
         config = ConfigManager.load(Path(config_path))
     else:
-        # Try to find config in input directory or current directory
-        search_paths = [
-            input_path / "sorty-sorty.config.json",
-            Path.cwd() / "sorty-sorty.config.json"
-        ]
-        
-        config = None
-        for path in search_paths:
-            if path.exists():
-                config = ConfigManager.load(path)
-                break
-        
-        if config is None:
-            config = Config()
-            console.print("[yellow]No config file found, using defaults[/yellow]")
+        config_file = Path.cwd() / "sorty-sorty.config.json"
+        if not config_file.exists():
+            console.print("[red]Error: No config file found in current directory[/red]")
+            console.print("\nRun [bold cyan]python cli.py init[/bold cyan] to create a new project")
+            sys.exit(1)
+        config = ConfigManager.load(config_file)
+    
+    # Use config values if not overridden by CLI
+    input_path = Path(input_dir).resolve() if input_dir else (Path.cwd() / config.input_dir).resolve()
+    output_path = Path(output_dir).resolve() if output_dir else (Path.cwd() / config.output_dir).resolve()
+    
+    if not input_path.exists():
+        console.print(f"[red]Error: Input directory does not exist: {input_path}[/red]")
+        sys.exit(1)
     
     # Override with CLI options
     if threshold is not None:
@@ -180,7 +173,6 @@ def scan(input_dir: str, output_dir: str, config_path: str | None = None, thresh
         console.print(f"\n[bold cyan]📚 {learnable_count} photo(s) can be learned (similarity >= {config.threshold:.0%})[/bold cyan]")
         
         # Flush stdout to ensure prompt appears immediately
-        import sys
         sys.stdout.flush()
         sys.stderr.flush()
         

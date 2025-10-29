@@ -22,11 +22,12 @@ class OcrConfig:
 
 @dataclass
 class Config:
-    """Main configuration for photo sorter."""
     version: int = 1
     profiles_dir: Path = field(default_factory=lambda: Path("profiles"))
+    input_dir: Path = field(default_factory=lambda: Path("photos"))
+    output_dir: Path = field(default_factory=lambda: Path("output"))
     threshold: float = 0.6
-    low_confidence_threshold: float = 0.5  # Changed from 0.45 to 0.5 (50%)
+    low_confidence_threshold: float = 0.5
     max_dimension: int = 1600
     concurrency: int = 3
     output_structure: OutputStructure = field(default_factory=OutputStructure)
@@ -38,10 +39,11 @@ class Config:
     verbose: bool = False
 
     def to_dict(self) -> Dict:
-        """Convert config to dictionary for JSON serialization."""
         return {
             "version": self.version,
             "profilesDir": str(self.profiles_dir),
+            "inputDir": str(self.input_dir),
+            "outputDir": str(self.output_dir),
             "threshold": self.threshold,
             "lowConfidenceThreshold": self.low_confidence_threshold,
             "maxDimension": self.max_dimension,
@@ -85,6 +87,8 @@ class Config:
         return cls(
             version=data.get("version", 1),
             profiles_dir=Path(data.get("profilesDir", "profiles")),
+            input_dir=Path(data.get("inputDir", "photos")),
+            output_dir=Path(data.get("outputDir", "output")),
             threshold=data.get("threshold", 0.6),
             low_confidence_threshold=data.get("lowConfidenceThreshold", 0.45),
             max_dimension=data.get("maxDimension", 1600),
