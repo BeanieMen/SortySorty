@@ -51,6 +51,7 @@ def init(directory: str):
     console.print(f"  - {photos_dir} (for input photos)")
     console.print(f"  - {output_dir} (for sorted output)")
     console.print(f"✓ Created config file: {config_path}")
+    
     console.print("\n[bold yellow]Next steps:[/bold yellow]")
     console.print("1. Add profile photos to profiles/person-name/")
     console.print("2. Add photos to sort to photos/")

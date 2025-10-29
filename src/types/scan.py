@@ -49,7 +49,7 @@ class FaceCluster:
         return {
             "members": [member.tolist() for member in self.members],
             "representative": self.representative,
-            "size": len(self.members),
+            "size": int(len(self.members)),
         }
 
 
@@ -68,12 +68,12 @@ class ScanReport:
     
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "processed": self.processed,
-            "copied": self.copied,
-            "duplicates": self.duplicates,
-            "ambiguous": self.ambiguous,
-            "unknownFaces": self.unknown_faces,
-            "errors": self.errors,
+            "processed": int(self.processed),
+            "copied": int(self.copied),
+            "duplicates": int(self.duplicates),
+            "ambiguous": int(self.ambiguous),
+            "unknownFaces": int(self.unknown_faces),
+            "errors": int(self.errors),
             "processedFiles": [f.to_dict() for f in self.processed_files],
             "clusters": [c.to_dict() for c in self.clusters],
             "reviewEntries": [r.to_dict() for r in self.review_entries],

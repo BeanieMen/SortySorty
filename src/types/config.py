@@ -26,8 +26,8 @@ class Config:
     profiles_dir: Path = field(default_factory=lambda: Path("profiles"))
     input_dir: Path = field(default_factory=lambda: Path("photos"))
     output_dir: Path = field(default_factory=lambda: Path("output"))
-    threshold: float = 0.6
-    low_confidence_threshold: float = 0.5
+    threshold: float = 0.4
+    low_confidence_threshold: float = 0.3
     max_dimension: int = 1600
     concurrency: int = 3
     output_structure: OutputStructure = field(default_factory=OutputStructure)

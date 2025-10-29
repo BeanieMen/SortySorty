@@ -378,8 +378,8 @@ class ScanService:
         
         if embedding is not None:
             match_result = self.face_service.match_face(embedding)
-            
-            if match_result.has_match:
+
+            if match_result.has_match and match_result.best_match:
                 # Matched a known person
                 person_name = match_result.best_match.name
                 dest_dir = output_dir / self.config.output_structure.people / person_name
@@ -421,6 +421,11 @@ class ScanService:
                     rename_with_timestamp=self.config.rename_with_timestamp
                 )
                 
+                # Get best similarity from alternatives even if below threshold
+                best_similarity = None
+                if match_result.alternatives:
+                    best_similarity = match_result.alternatives[0].similarity
+                
                 # Add to review if we have candidates
                 if match_result.alternatives:
                     report.review_entries.append(ReviewEntry(
@@ -436,7 +441,8 @@ class ScanService:
                     source=image_path,
                     destination=destination,
                     action="copied",
-                    matched_person="unknown"
+                    matched_person="unknown",
+                    similarity=best_similarity
                 )
         
         # No face detected - try OCR

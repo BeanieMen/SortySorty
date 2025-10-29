@@ -47,7 +47,7 @@ class ClusterService:
                 cluster = FaceCluster(
                     members=members,
                     representative={
-                        "clusterId": cluster_id,
+                        "clusterId": int(cluster_id),
                         "size": len(members),
                         "centroid": centroid.tolist()
                     }

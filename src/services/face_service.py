@@ -5,7 +5,7 @@ import numpy.typing as npt
 import face_recognition
 
 from ..types.face import FaceMatchResult, FaceMatch, FaceCandidate
-from ..helpers.math import cosine_similarity
+from ..helpers.math import euclidean_distance
 from ..helpers.image import create_fallback_embedding
 from .embedding_cache import EmbeddingCache
 
@@ -155,20 +155,28 @@ class FaceService:
                 image = np.array(pil_img)
                 t_resize = time.perf_counter() - t_start
             
-            # PERFORMANCE: Skip upsampling for speed (number_of_times_to_upsample=0)
-            # This is 10x faster but may miss very small faces
-            
-            # First detect face locations (HOG model is faster than CNN)
+            # Use RetinaFace for accurate face detection
             t_start = time.perf_counter()
-            face_locations_list = face_recognition.face_locations(
-                image,
-                number_of_times_to_upsample=0,
-                model='hog'
-            )
+            
+            face_locations_list = []
+            try:
+                from retinaface import RetinaFace
+                # RetinaFace requires file path
+                faces_dict = RetinaFace.detect_faces(str(image_path))
+                
+                if faces_dict and isinstance(faces_dict, dict):
+                    # Get first face (highest confidence)
+                    face_data = list(faces_dict.values())[0]
+                    x1, y1, x2, y2 = face_data['facial_area']
+                    # Convert to face_recognition format (top, right, bottom, left)
+                    face_locations_list = [(int(y1), int(x2), int(y2), int(x1))]
+            except Exception:
+                # RetinaFace not available or failed
+                pass
+            
             t_detect = time.perf_counter() - t_start
             
             if not face_locations_list:
-                # No face found - use fallback if enabled
                 if verbose:
                     from rich import print as rprint
                     t_total = time.perf_counter() - t_total_start
@@ -177,13 +185,11 @@ class FaceService:
                     return create_fallback_embedding(image_path)
                 return None
             
-            # Extract encodings for detected faces (num_jitters=0 for speed)
             t_start = time.perf_counter()
             encodings = face_recognition.face_encodings(
                 image,
                 known_face_locations=face_locations_list,
-                num_jitters=0,
-                model='small'
+                num_jitters=10
             )
             t_encode = time.perf_counter() - t_start
             
@@ -227,10 +233,12 @@ class FaceService:
         
         candidates: List[FaceCandidate] = []
         
-        # Compare against all profile embeddings
+        # Compare against all profile embeddings using euclidean distance
+        # face_recognition uses euclidean distance, convert to similarity (1 - distance)
         for profile_name, profile_embeddings in self.profile_embeddings.items():
             for ref_embedding in profile_embeddings:
-                similarity = cosine_similarity(embedding, ref_embedding)
+                distance = euclidean_distance(embedding, ref_embedding)
+                similarity = 1.0 - distance  # Convert distance to similarity
                 candidates.append(FaceCandidate(name=profile_name, similarity=similarity))
         
         # Sort by similarity (highest first)

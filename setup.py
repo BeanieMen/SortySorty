@@ -10,7 +10,7 @@ setup(
     description="Local face recognition and photo organization tool",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/sorty-sorty",
+    url="https://github.com/beaniemen/sorty-sorty",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     python_requires=">=3.8",
@@ -24,6 +24,19 @@ setup(
         "rich>=13.0.0",
         "tqdm>=4.65.0",
     ],
+    extras_require={
+        "yolo": [
+            "ultralytics>=8.0.0",
+            "torch>=2.0.0",
+            "torchvision>=0.15.0",
+            "timm>=0.9.0",
+        ],
+        "dev": [
+            "pytest>=7.4.0",
+            "black>=23.0.0",
+            "mypy>=1.5.0",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "sorty-sorty=cli:main",
