@@ -6,13 +6,13 @@ import cv2
 from insightface.app import FaceAnalysis
 
 from ..types.face import FaceMatchResult, FaceMatch, FaceCandidate
-from ..helpers.math import euclidean_distance
+from ..helpers.math import cosine_similarity
 from .embedding_cache import EmbeddingCache
 
 
 class FaceService:
     
-    def __init__(self, threshold: float = 0.6, low_confidence_threshold: float = 0.5):
+    def __init__(self, threshold: float = 0.52, low_confidence_threshold: float = 0.45):
         self.threshold = threshold
         self.low_confidence_threshold = low_confidence_threshold
         self.profile_embeddings: Dict[str, List[npt.NDArray[np.float64]]] = {}
@@ -129,24 +129,38 @@ class FaceService:
     
     def extract_embedding(self, image_path: Path, verbose: bool = False) -> Optional[npt.NDArray[np.float64]]:
         """
-        Extract face embedding from an image using InsightFace.
+        Extract face embedding from an image using InsightFace with preprocessing.
         
         Args:
             image_path: Path to image file
             verbose: Whether to print detailed timing information
         
         Returns:
-            512-D face embedding or None if extraction fails
+            Normalized 512-D face embedding or None if extraction fails
         """
         import time
-        t_total_start = time.perf_counter()
+        t_start = time.perf_counter()
         
         try:
             # Load image with OpenCV (BGR format)
-            t_start = time.perf_counter()
             image = cv2.imread(str(image_path))
             if image is None:
                 return None
+            
+            # Apply image preprocessing for better face detection
+            # 1. Convert to RGB for better color representation
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # 2. Apply histogram equalization to improve contrast
+            # Convert to LAB color space for better illumination normalization
+            lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+            l, a, b = cv2.split(lab)
+            l = cv2.equalizeHist(l)
+            lab = cv2.merge([l, a, b])
+            image = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+            
+            # Convert back to BGR for InsightFace
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             
             # Use InsightFace for face detection and embedding extraction
             faces = self.face_app.get(image)
@@ -161,6 +175,12 @@ class FaceService:
             # Get the first face (highest confidence)
             embedding = faces[0].embedding.astype(np.float64)
             
+            # Normalize embedding to unit vector for better comparison
+            # This makes distance calculations more consistent
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+            
             if verbose:
                 from rich import print as rprint
                 rprint(f"  [cyan]⏱[/cyan]  [bold]{image_path.name}[/bold]: {t_total:.3f}s")
@@ -174,10 +194,10 @@ class FaceService:
     
     def match_face(self, embedding: npt.NDArray[np.float64]) -> FaceMatchResult:
         """
-        Match a face embedding against all loaded profiles.
+        Match a face embedding against all loaded profiles using cosine similarity.
         
         Args:
-            embedding: Face embedding to match
+            embedding: Normalized face embedding to match
         
         Returns:
             FaceMatchResult with best match and alternatives
@@ -187,12 +207,12 @@ class FaceService:
         
         candidates: List[FaceCandidate] = []
         
-        # Compare against all profile embeddings using euclidean distance
-        # face_recognition uses euclidean distance, convert to similarity (1 - distance)
+        # Compare against all profile embeddings using cosine similarity
+        # Cosine similarity ranges from -1 to 1, where 1 is identical
+        # This is more accurate for normalized embeddings
         for profile_name, profile_embeddings in self.profile_embeddings.items():
             for ref_embedding in profile_embeddings:
-                distance = euclidean_distance(embedding, ref_embedding)
-                similarity = 1.0 - distance  # Convert distance to similarity
+                similarity = cosine_similarity(embedding, ref_embedding)
                 candidates.append(FaceCandidate(name=profile_name, similarity=similarity))
         
         # Sort by similarity (highest first)
@@ -208,7 +228,7 @@ class FaceService:
             )
             
             # Check if match is ambiguous
-            # Ambiguous = similarity between low_confidence_threshold (0.45-0.5) and threshold (0.6)
+            # Ambiguous = similarity between low_confidence_threshold (0.45) and threshold (0.52)
             # This means we're uncertain about the match
             is_ambiguous = best.similarity < self.threshold and best.similarity >= self.low_confidence_threshold
             

@@ -26,8 +26,8 @@ class Config:
     profiles_dir: Path = field(default_factory=lambda: Path("profiles"))
     input_dir: Path = field(default_factory=lambda: Path("photos"))
     output_dir: Path = field(default_factory=lambda: Path("output"))
-    threshold: float = 0.4
-    low_confidence_threshold: float = 0.3
+    threshold: float = 0.52
+    low_confidence_threshold: float = 0.45
     max_dimension: int = 1600
     concurrency: int = 3
     output_structure: OutputStructure = field(default_factory=OutputStructure)
@@ -89,7 +89,7 @@ class Config:
             profiles_dir=Path(data.get("profilesDir", "profiles")),
             input_dir=Path(data.get("inputDir", "photos")),
             output_dir=Path(data.get("outputDir", "output")),
-            threshold=data.get("threshold", 0.6),
+            threshold=data.get("threshold", 0.52),
             low_confidence_threshold=data.get("lowConfidenceThreshold", 0.45),
             max_dimension=data.get("maxDimension", 1600),
             concurrency=data.get("concurrency", 3),
