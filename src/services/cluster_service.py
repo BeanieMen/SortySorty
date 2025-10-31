@@ -19,17 +19,13 @@ class ClusterService:
         if len(embeddings) < self.min_samples:
             return []
         
-        # Convert to numpy array
         X = np.array(embeddings)
-        
-        # Perform DBSCAN clustering
         clustering = DBSCAN(eps=self.eps, min_samples=self.min_samples, metric='cosine')
         labels = clustering.fit_predict(X)
         
-        # Group embeddings by cluster
         clusters: dict[int, List[npt.NDArray[np.float64]]] = {}
         for idx, label in enumerate(labels):
-            if label == -1:  # Noise point
+            if label == -1:
                 continue
             
             if label not in clusters:
@@ -37,11 +33,9 @@ class ClusterService:
             
             clusters[label].append(embeddings[idx])
         
-        # Create FaceCluster objects
         result: List[FaceCluster] = []
         for cluster_id, members in clusters.items():
             if len(members) >= self.min_samples:
-                # Use the centroid as representative
                 centroid = np.mean(members, axis=0)
                 
                 cluster = FaceCluster(

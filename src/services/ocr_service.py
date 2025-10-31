@@ -14,19 +14,11 @@ class OcrService:
     
     def extract_text(self, image_path: Path) -> OcrResult:
         try:
-            # Load image
             image = Image.open(image_path)
-            
-            # Extract text using Tesseract
             text = pytesseract.image_to_string(image)
-            
-            # Calculate confidence (simplified - Tesseract has detailed confidence metrics)
             confidence = 0.8 if text.strip() else 0.0
-            
-            # Check if it's a screenshot
             is_screenshot = len(text.strip()) >= self.config.text_length_threshold
             
-            # Check if it's a chat screenshot
             is_chat = False
             if is_screenshot:
                 text_lower = text.lower()

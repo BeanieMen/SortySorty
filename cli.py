@@ -32,7 +32,6 @@ def init(directory: str):
     
     console.print(f"[bold green]Initializing sorty sorty project in {base_dir}[/bold green]")
     
-    # Create directory structure
     profiles_dir = base_dir / "profiles"
     photos_dir = base_dir / "photos"
     output_dir = base_dir / "output"
@@ -41,7 +40,6 @@ def init(directory: str):
     ensure_directory(photos_dir)
     ensure_directory(output_dir)
     
-    # Create default config
     config = ConfigManager.create_default(base_dir)
     config_path = base_dir / "sorty-sorty.config.json"
     ConfigManager.save(config, config_path)
@@ -77,7 +75,6 @@ def scan(input_dir: str | None = None, output_dir: str | None = None, config_pat
          delete_duplicates: bool = False, rename_timestamp: bool = False, no_clustering: bool = False):
     """Scan and organize photos from input directory."""
     
-    # Check for config file
     if config_path:
         config = ConfigManager.load(Path(config_path))
     else:
@@ -88,7 +85,6 @@ def scan(input_dir: str | None = None, output_dir: str | None = None, config_pat
             sys.exit(1)
         config = ConfigManager.load(config_file)
     
-    # Use config values if not overridden by CLI
     input_path = Path(input_dir).resolve() if input_dir else (Path.cwd() / config.input_dir).resolve()
     output_path = Path(output_dir).resolve() if output_dir else (Path.cwd() / config.output_dir).resolve()
     
@@ -96,7 +92,6 @@ def scan(input_dir: str | None = None, output_dir: str | None = None, config_pat
         console.print(f"[red]Error: Input directory does not exist: {input_path}[/red]")
         sys.exit(1)
     
-    # Override with CLI options
     if threshold is not None:
         config.threshold = threshold
     
@@ -123,7 +118,6 @@ def scan(input_dir: str | None = None, output_dir: str | None = None, config_pat
     if no_clustering:
         config.store_unknown_clusters = False
     
-    # Ensure profiles dir is absolute
     if not config.profiles_dir.is_absolute():
         config.profiles_dir = input_path.parent / config.profiles_dir
     
@@ -133,18 +127,15 @@ def scan(input_dir: str | None = None, output_dir: str | None = None, config_pat
     console.print(f"Profiles: {config.profiles_dir}")
     console.print(f"Threshold: {config.threshold}\n")
     
-    # Run scan
     scan_service = ScanService(config)
     report = scan_service.scan(input_path, output_path)
     
-    # Save report
     report_path = output_path / "report.json"
     ensure_directory(output_path)
     
     with open(report_path, 'w') as f:
         json.dump(report.to_dict(), f, indent=2)
     
-    # Display summary
     console.print("\n[bold green]Scan Complete![/bold green]")
     
     table = Table(show_header=True, header_style="bold magenta")
@@ -167,13 +158,10 @@ def scan(input_dir: str | None = None, output_dir: str | None = None, config_pat
     if report.review_entries:
         console.print(f"\n[yellow]⚠ {len(report.review_entries)} photo(s) need review[/yellow]")
     
-    # Check if there are learnable photos and ask user
     learnable_count = _count_learnable_photos(report_path, config.threshold)
     
     if learnable_count > 0:
         console.print(f"\n[bold cyan]📚 {learnable_count} photo(s) can be learned (similarity >= {config.threshold:.0%})[/bold cyan]")
-        
-        # Flush stdout to ensure prompt appears immediately
         sys.stdout.flush()
         sys.stderr.flush()
         
@@ -224,11 +212,9 @@ def learn(report_path: str, min_similarity: float, profiles: str | None = None, 
     """Learn from high-confidence matches in a scan report."""
     report_file = Path(report_path).resolve()
     
-    # Determine profiles directory
     if profiles:
         profiles_dir = Path(profiles).resolve()
     else:
-        # Try to find profiles directory
         profiles_dir = report_file.parent.parent / "profiles"
         
         if not profiles_dir.exists():
@@ -244,7 +230,6 @@ def learn(report_path: str, min_similarity: float, profiles: str | None = None, 
     if dry_run:
         console.print("[yellow]DRY RUN MODE - No files will be copied[/yellow]\n")
     
-    # Learn from report
     learned_count = learn_from_report(
         report_file,
         profiles_dir,
@@ -268,18 +253,15 @@ def learn(report_path: str, min_similarity: float, profiles: str | None = None, 
 @click.option('--profiles', '-p', type=click.Path(exists=True), help="Profiles directory")
 def add_person(name: str, images: tuple, profiles: str | None = None):
     """Add a new person profile with reference images."""
-    # Determine profiles directory
     if profiles:
         profiles_dir = Path(profiles).resolve()
     else:
         profiles_dir = Path.cwd() / "profiles"
     
-    # Create profile directory
     profile_name = slugify(name)
     profile_dir = profiles_dir / profile_name
     ensure_directory(profile_dir)
     
-    # Copy images
     from src.helpers.fs import copy_file
     
     copied = 0
@@ -308,11 +290,9 @@ def stats(output_dir: str):
         console.print(f"[red]Error: No report.json found in {output_path}[/red]")
         sys.exit(1)
     
-    # Load report
     with open(report_path, 'r') as f:
         report = json.load(f)
     
-    # Display statistics
     console.print(f"\n[bold]Scan Report Statistics[/bold]")
     console.print(f"Timestamp: {report.get('timestamp', 'Unknown')}\n")
     
@@ -331,7 +311,6 @@ def stats(output_dir: str):
     
     console.print(table)
     
-    # Show person breakdown
     person_counts = {}
     for file_data in report.get('processedFiles', []):
         person = file_data.get('matchedPerson')

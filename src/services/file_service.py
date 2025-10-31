@@ -27,14 +27,11 @@ class FileService:
         filename: Optional[str] = None,
         rename_with_timestamp: bool = False
     ) -> Optional[Path]:
-        # Compute hash for duplicate detection
         file_hash = compute_hash(source)
         
-        # Check if already processed
         if file_hash in self.processed_hashes:
             return self.hash_to_destination.get(file_hash)
         
-        # Determine filename
         if filename is None:
             filename = source.name
         
@@ -44,13 +41,9 @@ class FileService:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{stem}_{timestamp}{suffix}"
         
-        # Ensure destination directory exists
         ensure_directory(destination_dir)
-        
-        # Create destination path
         destination = destination_dir / filename
         
-        # Handle filename conflicts
         counter = 1
         while destination.exists():
             stem = Path(filename).stem
@@ -58,9 +51,7 @@ class FileService:
             destination = destination_dir / f"{stem}_{counter}{suffix}"
             counter += 1
         
-        # Copy file
         if copy_file(source, destination):
-            # Track hash
             self.processed_hashes.add(file_hash)
             self.hash_to_destination[file_hash] = destination
             return destination

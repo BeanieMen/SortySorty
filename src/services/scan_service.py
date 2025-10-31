@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any
 import numpy as np
 import numpy.typing as npt
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
@@ -13,9 +13,7 @@ from ..services.face_service import FaceService
 from ..services.ocr_service import OcrService
 from ..services.file_service import FileService
 from ..services.cluster_service import ClusterService
-from ..helpers.fs import ensure_directory
 
-# Create console for colored output
 console = Console()
 
 
@@ -23,24 +21,20 @@ console = Console()
 def _process_image_worker(args: Tuple[Path, Dict[str, Any]]) -> Dict[str, Any]:
     image_path, config_dict = args
     
-    # Recreate services in worker process
     from ..types.config import Config
     from ..services.face_service import FaceService
     
     config = Config(**config_dict)
     face_service = FaceService(config.threshold, config.low_confidence_threshold)
     
-    # Load profiles from cache only (already computed in main process)
     if not hasattr(_process_image_worker, '_profiles_loaded'):
         if not face_service.load_from_cache_only(config.profiles_dir):
-            # Cache should exist since main process creates it
             raise RuntimeError("Profile cache not found - main process should have created it")
         _process_image_worker._profiles_loaded = True
         _process_image_worker._face_service = face_service
     else:
         face_service = _process_image_worker._face_service
     
-    # Extract face embedding
     verbose = config_dict.get('verbose', False)
     embedding = face_service.extract_embedding(image_path, verbose=verbose)
     
@@ -85,15 +79,11 @@ class ScanService:
     def scan(self, input_dir: Path, output_dir: Path) -> ScanReport:
         import time
         
-        # Initialize report
         report = ScanReport()
         
-        # Reset file service for new scan
         self.file_service.reset()
         self.unknown_embeddings = []
         
-        # Load face profiles FIRST (before deciding on parallel vs sequential)
-        # This ensures cache is computed once in the main process
         t_start = time.perf_counter()
         console.print(f"Loading face profiles from [cyan]{self.config.profiles_dir}[/cyan]...")
         self.face_service.load_profiles(self.config.profiles_dir, verbose=self.config.verbose)
@@ -112,7 +102,6 @@ class ScanService:
         if not image_files:
             return report
         
-        # Use multiprocessing for CPU-bound face recognition
         use_multiprocessing = self.config.concurrency > 1 and len(image_files) > 1
         
         if use_multiprocessing:
@@ -122,7 +111,6 @@ class ScanService:
             console.print("[yellow]Processing sequentially...[/yellow]")
             self._scan_sequential(image_files, output_dir, report)
         
-        # Cluster unknown faces if enabled
         if self.config.store_unknown_clusters and self.unknown_embeddings:
             console.print(f"\n[cyan]Clustering {len(self.unknown_embeddings)} unknown face(s)...[/cyan]")
             clusters = self.cluster_service.cluster_faces(self.unknown_embeddings)
@@ -134,8 +122,6 @@ class ScanService:
     def _scan_sequential(self, image_files: List[Path], output_dir: Path, report: ScanReport) -> None:
         import time
         
-        # Profiles already loaded in main scan() method
-        # Process images with progress bar
         t_process_start = time.perf_counter()
         with Progress(
             SpinnerColumn(),
@@ -178,7 +164,6 @@ class ScanService:
     def _scan_parallel(self, image_files: List[Path], output_dir: Path, report: ScanReport) -> None:
         import time
         
-        # Convert config to dict for pickling
         config_dict = {
             'threshold': self.config.threshold,
             'low_confidence_threshold': self.config.low_confidence_threshold,
@@ -191,10 +176,7 @@ class ScanService:
             'verbose': self.config.verbose,
         }
         
-        # Prepare arguments for workers
         worker_args = [(img_path, config_dict) for img_path in image_files]
-        
-        # Process in parallel
         results_map: Dict[str, Dict[str, Any]] = {}
         
         t_process_start = time.perf_counter()
@@ -208,13 +190,11 @@ class ScanService:
             ) as progress:
                 task = progress.add_task("Processing photos...", total=len(image_files))
                 
-                # Submit all tasks
                 future_to_path = {
                     executor.submit(_process_image_worker, args): args[0]
                     for args in worker_args
                 }
                 
-                # Process results as they complete
                 for future in as_completed(future_to_path):
                     image_path = future_to_path[future]
                     try:
@@ -235,15 +215,12 @@ class ScanService:
         if self.config.verbose:
             console.print(f"\n[bold green]Parallel processing time:[/bold green] [yellow]{t_process_total:.2f}s[/yellow] ([dim]{t_process_total/len(image_files):.2f}s per image avg[/dim])")
         
-        # Now process results in original order and perform file operations
-        # (File operations must be done sequentially to avoid conflicts)
         for image_path in image_files:
             result = results_map.get(str(image_path))
             if not result:
                 continue
             
             try:
-                # Check for duplicates
                 if self.file_service.is_duplicate(image_path):
                     processed = ProcessedFile(
                         source=image_path,
@@ -255,7 +232,6 @@ class ScanService:
                     report.duplicates += 1
                     continue
                 
-                # Handle errors from worker
                 if 'error' in result and not result.get('has_face'):
                     processed = ProcessedFile(
                         source=image_path,
@@ -268,14 +244,12 @@ class ScanService:
                     report.errors += 1
                     continue
                 
-                # Process face recognition result
                 if result.get('has_face') and result.get('embedding'):
                     embedding_list = result['embedding']
                     embedding = np.array(embedding_list, dtype=np.float64)
                     match_info = result.get('match_result', {})
                     
                     if match_info.get('has_match') and match_info.get('best_match'):
-                        # Matched a known person
                         person_name = match_info['best_match']['name']
                         similarity = match_info['best_match']['similarity']
                         
@@ -286,7 +260,6 @@ class ScanService:
                             rename_with_timestamp=self.config.rename_with_timestamp
                         )
                         
-                        # Check if ambiguous
                         if match_info.get('is_ambiguous'):
                             report.ambiguous += 1
                             report.review_entries.append(ReviewEntry(
@@ -306,7 +279,6 @@ class ScanService:
                         report.processed += 1
                         report.copied += 1
                     else:
-                        # Unknown face
                         report.unknown_faces += 1
                         self.unknown_embeddings.append(embedding)
                         
@@ -317,7 +289,6 @@ class ScanService:
                             rename_with_timestamp=self.config.rename_with_timestamp
                         )
                         
-                        # Add to review if we have candidates
                         alternatives = match_info.get('alternatives', [])
                         if alternatives:
                             report.review_entries.append(ReviewEntry(
@@ -336,7 +307,6 @@ class ScanService:
                         report.processed += 1
                         report.copied += 1
                 else:
-                    # No face detected - handle as generic photo
                     dest_dir = output_dir / self.config.output_structure.others
                     destination = self.file_service.copy_photo(
                         image_path,
@@ -365,7 +335,6 @@ class ScanService:
                 report.processed += 1
     
     def _process_image(self, image_path: Path, output_dir: Path, report: ScanReport) -> ProcessedFile:
-        # Check for duplicates
         if self.file_service.is_duplicate(image_path):
             return ProcessedFile(
                 source=image_path,
@@ -373,7 +342,6 @@ class ScanService:
                 action="skipped-duplicate"
             )
         
-        # Try face recognition first
         embedding = self.face_service.extract_embedding(image_path, verbose=self.config.verbose)
         
         if embedding is not None:
@@ -390,7 +358,6 @@ class ScanService:
                     rename_with_timestamp=self.config.rename_with_timestamp
                 )
                 
-                # Check if ambiguous
                 if match_result.is_ambiguous:
                     report.ambiguous += 1
                     report.review_entries.append(ReviewEntry(
@@ -410,7 +377,6 @@ class ScanService:
                     similarity=match_result.best_match.similarity
                 )
             else:
-                # Unknown face
                 report.unknown_faces += 1
                 self.unknown_embeddings.append(embedding)
                 
@@ -421,12 +387,10 @@ class ScanService:
                     rename_with_timestamp=self.config.rename_with_timestamp
                 )
                 
-                # Get best similarity from alternatives even if below threshold
                 best_similarity = None
                 if match_result.alternatives:
                     best_similarity = match_result.alternatives[0].similarity
                 
-                # Add to review if we have candidates
                 if match_result.alternatives:
                     report.review_entries.append(ReviewEntry(
                         image_path=image_path,
@@ -445,21 +409,16 @@ class ScanService:
                     similarity=best_similarity
                 )
         
-        # No face detected - try OCR
         if not self.config.ocr.enable_on_faces:
             ocr_result = self.ocr_service.extract_text(image_path)
             
             if ocr_result.is_chat:
-                # Chat screenshot
                 dest_dir = output_dir / self.config.output_structure.chats
             elif ocr_result.is_screenshot:
-                # Regular screenshot
                 dest_dir = output_dir / self.config.output_structure.screenshots
             else:
-                # Other
                 dest_dir = output_dir / self.config.output_structure.others
         else:
-            # Skip OCR, categorize as other
             dest_dir = output_dir / self.config.output_structure.others
         
         destination = self.file_service.copy_photo(
