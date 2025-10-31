@@ -2,7 +2,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import numpy as np
 import numpy.typing as npt
-import face_recognition
+import cv2
+from insightface.app import FaceAnalysis
 
 from ..types.face import FaceMatchResult, FaceMatch, FaceCandidate
 from ..helpers.math import euclidean_distance
@@ -17,6 +18,17 @@ class FaceService:
         self.low_confidence_threshold = low_confidence_threshold
         self.profile_embeddings: Dict[str, List[npt.NDArray[np.float64]]] = {}
         self.cache: Optional[EmbeddingCache] = None
+        
+        # Initialize InsightFace once (lazy loading)
+        self._face_app: Optional[FaceAnalysis] = None
+    
+    @property
+    def face_app(self) -> FaceAnalysis:
+        """Lazy-load InsightFace model."""
+        if self._face_app is None:
+            self._face_app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+            self._face_app.prepare(ctx_id=0, det_size=(640, 640))
+        return self._face_app
     
     def load_profiles(self, profiles_dir: Path, verbose: bool = False) -> None:
         from rich import print as rprint
@@ -118,7 +130,7 @@ class FaceService:
     
     def extract_embedding(self, image_path: Path, use_fallback: bool = True, verbose: bool = False) -> Optional[npt.NDArray[np.float64]]:
         """
-        Extract face embedding from an image.
+        Extract face embedding from an image using InsightFace.
         
         Args:
             image_path: Path to image file
@@ -126,19 +138,20 @@ class FaceService:
             verbose: Whether to print detailed timing information
         
         Returns:
-            128-D face embedding or None if extraction fails
+            512-D face embedding or None if extraction fails
         """
         import time
         t_total_start = time.perf_counter()
         
         try:
-            # Load image
+            # Load image with OpenCV (BGR format)
             t_start = time.perf_counter()
-            image = face_recognition.load_image_file(str(image_path))
+            image = cv2.imread(str(image_path))
+            if image is None:
+                raise ValueError(f"Could not load image: {image_path}")
             t_load = time.perf_counter() - t_start
             
             # PERFORMANCE: Downscale huge images (>1600px) for faster processing
-            # Face detection on 5760x3840 images is extremely slow
             height, width = image.shape[:2]
             max_dimension = max(height, width)
             
@@ -147,36 +160,16 @@ class FaceService:
                 # Downscale to max 1600px on longest side
                 t_start = time.perf_counter()
                 scale_factor = 1600 / max_dimension
-                from PIL import Image as PILImage
-                import numpy as np
-                pil_img = PILImage.fromarray(image)
                 new_size = (int(width * scale_factor), int(height * scale_factor))
-                pil_img = pil_img.resize(new_size, PILImage.Resampling.LANCZOS)
-                image = np.array(pil_img)
+                image = cv2.resize(image, new_size, interpolation=cv2.INTER_LANCZOS4)
                 t_resize = time.perf_counter() - t_start
             
-            # Use RetinaFace for accurate face detection
+            # Use InsightFace for face detection and embedding extraction
             t_start = time.perf_counter()
-            
-            face_locations_list = []
-            try:
-                from retinaface import RetinaFace
-                # RetinaFace requires file path
-                faces_dict = RetinaFace.detect_faces(str(image_path))
-                
-                if faces_dict and isinstance(faces_dict, dict):
-                    # Get first face (highest confidence)
-                    face_data = list(faces_dict.values())[0]
-                    x1, y1, x2, y2 = face_data['facial_area']
-                    # Convert to face_recognition format (top, right, bottom, left)
-                    face_locations_list = [(int(y1), int(x2), int(y2), int(x1))]
-            except Exception:
-                # RetinaFace not available or failed
-                pass
-            
+            faces = self.face_app.get(image)
             t_detect = time.perf_counter() - t_start
             
-            if not face_locations_list:
+            if not faces:
                 if verbose:
                     from rich import print as rprint
                     t_total = time.perf_counter() - t_total_start
@@ -185,29 +178,17 @@ class FaceService:
                     return create_fallback_embedding(image_path)
                 return None
             
-            t_start = time.perf_counter()
-            encodings = face_recognition.face_encodings(
-                image,
-                known_face_locations=face_locations_list,
-                num_jitters=10
-            )
-            t_encode = time.perf_counter() - t_start
+            # Get the first face (highest confidence)
+            face = faces[0]
+            embedding = face.embedding.astype(np.float64)
             
             t_total = time.perf_counter() - t_total_start
             
             if verbose:
                 from rich import print as rprint
-                rprint(f"  [cyan]⏱[/cyan]  [bold]{image_path.name}[/bold]: load=[green]{t_load:.3f}s[/green], resize=[yellow]{t_resize:.3f}s[/yellow], detect=[blue]{t_detect:.3f}s[/blue], encode=[magenta]{t_encode:.3f}s[/magenta], total=[bold green]{t_total:.3f}s[/bold green]")
+                rprint(f"  [cyan]⏱[/cyan]  [bold]{image_path.name}[/bold]: load=[green]{t_load:.3f}s[/green], resize=[yellow]{t_resize:.3f}s[/yellow], detect+embed=[blue]{t_detect:.3f}s[/blue], total=[bold green]{t_total:.3f}s[/bold green]")
             
-            if len(encodings) > 0:
-                # Return the first face found
-                return encodings[0]
-            
-            # No encoding extracted - use fallback if enabled
-            if use_fallback:
-                return create_fallback_embedding(image_path)
-            
-            return None
+            return embedding
             
         except Exception as e:
             print(f"Error extracting embedding from {image_path}: {e}")
@@ -282,9 +263,11 @@ class FaceService:
             Number of faces detected
         """
         try:
-            image = face_recognition.load_image_file(str(image_path))
-            face_locations = face_recognition.face_locations(image)
-            return len(face_locations)
+            image = cv2.imread(str(image_path))
+            if image is None:
+                return 0
+            faces = self.face_app.get(image)
+            return len(faces)
         except Exception:
             return 0
     
@@ -296,11 +279,13 @@ class FaceService:
             image_path: Path to image file
         
         Returns:
-            List of face embeddings
+            List of face embeddings (512-D each)
         """
         try:
-            image = face_recognition.load_image_file(str(image_path))
-            encodings = face_recognition.face_encodings(image)
-            return list(encodings)
+            image = cv2.imread(str(image_path))
+            if image is None:
+                return []
+            faces = self.face_app.get(image)
+            return [face.embedding.astype(np.float64) for face in faces]
         except Exception:
             return []

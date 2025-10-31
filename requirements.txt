@@ -1,5 +1,6 @@
-# Face recognition (dlib-based, produces 128-D embeddings)
-face-recognition>=1.3.0
+# Face recognition (InsightFace, produces 512-D embeddings)
+insightface>=0.7.3
+onnxruntime>=1.23.0
 
 # OCR
 pytesseract>=0.3.10

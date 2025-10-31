@@ -7,7 +7,7 @@ No cloud services, no uploads — just intelligent photo sorting, OCR, and clust
 
 ## 🚀 Features
 
-- 🎭 **Face Recognition** — Detects and matches faces using dlib (128-D embeddings)
+- 🎭 **Face Recognition** — Detects and matches faces using InsightFace (512-D embeddings)
 - ⚡ **Embedding Cache** — 94× faster after first run
 - 🧠 **Auto-Learning** — Improves accuracy from high-confidence matches
 - 🔍 **Duplicate Detection** — SHA-1 hash-based duplicate prevention
@@ -23,7 +23,7 @@ No cloud services, no uploads — just intelligent photo sorting, OCR, and clust
 
 ### Arch Linux
 ```bash
-sudo pacman -S python python-pip python-dlib python-pillow tesseract
+sudo pacman -S python python-pip python-pillow tesseract opencv
 ```
 
 ### Ubuntu / Debian
@@ -217,10 +217,10 @@ src/
 
 | Area | Library |
 |------|----------|
-| Face Recognition | `face_recognition` (dlib) |
+| Face Recognition | `insightface` (512-D embeddings) |
 | OCR | `pytesseract` |
 | Clustering | `scikit-learn` (DBSCAN) |
-| Image Processing | `Pillow` |
+| Image Processing | `Pillow`, `opencv-python` |
 | CLI | `click` + `rich` |
 | Multiprocessing | `concurrent.futures` |
 | Arrays | `numpy` |
@@ -235,7 +235,7 @@ src/
 | **OCR not working** | Install Tesseract: `sudo pacman -S tesseract` |
 | **Slow scans** | Enable `--parallel` and check cache usage |
 | **All photos in unknown** | Lower threshold to `0.5` or add more profile photos |
-| **dlib build errors** | On Arch: `sudo pacman -S python-dlib` |
+| **ONNX errors** | Ensure `onnxruntime` is installed: `pip install onnxruntime` |
 
 ---
 
