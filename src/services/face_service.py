@@ -7,7 +7,6 @@ from insightface.app import FaceAnalysis
 
 from ..types.face import FaceMatchResult, FaceMatch, FaceCandidate
 from ..helpers.math import euclidean_distance
-from ..helpers.image import create_fallback_embedding
 from .embedding_cache import EmbeddingCache
 
 
@@ -128,13 +127,12 @@ class FaceService:
         
         return False
     
-    def extract_embedding(self, image_path: Path, use_fallback: bool = True, verbose: bool = False) -> Optional[npt.NDArray[np.float64]]:
+    def extract_embedding(self, image_path: Path, verbose: bool = False) -> Optional[npt.NDArray[np.float64]]:
         """
         Extract face embedding from an image using InsightFace.
         
         Args:
             image_path: Path to image file
-            use_fallback: Whether to use pixel-based fallback if face detection fails
             verbose: Whether to print detailed timing information
         
         Returns:
@@ -148,55 +146,30 @@ class FaceService:
             t_start = time.perf_counter()
             image = cv2.imread(str(image_path))
             if image is None:
-                raise ValueError(f"Could not load image: {image_path}")
-            t_load = time.perf_counter() - t_start
-            
-            # PERFORMANCE: Downscale huge images (>1600px) for faster processing
-            height, width = image.shape[:2]
-            max_dimension = max(height, width)
-            
-            t_resize = 0.0
-            if max_dimension > 1600:
-                # Downscale to max 1600px on longest side
-                t_start = time.perf_counter()
-                scale_factor = 1600 / max_dimension
-                new_size = (int(width * scale_factor), int(height * scale_factor))
-                image = cv2.resize(image, new_size, interpolation=cv2.INTER_LANCZOS4)
-                t_resize = time.perf_counter() - t_start
+                return None
             
             # Use InsightFace for face detection and embedding extraction
-            t_start = time.perf_counter()
             faces = self.face_app.get(image)
-            t_detect = time.perf_counter() - t_start
+            t_total = time.perf_counter() - t_start
             
             if not faces:
                 if verbose:
                     from rich import print as rprint
-                    t_total = time.perf_counter() - t_total_start
-                    rprint(f"  [dim]⏱  {image_path.name}: NO FACE - load={t_load:.3f}s, resize={t_resize:.3f}s, detect={t_detect:.3f}s, total={t_total:.3f}s[/dim]")
-                if use_fallback:
-                    return create_fallback_embedding(image_path)
+                    rprint(f"  [dim]⏱  {image_path.name}: NO FACE - {t_total:.3f}s[/dim]")
                 return None
             
             # Get the first face (highest confidence)
-            face = faces[0]
-            embedding = face.embedding.astype(np.float64)
-            
-            t_total = time.perf_counter() - t_total_start
+            embedding = faces[0].embedding.astype(np.float64)
             
             if verbose:
                 from rich import print as rprint
-                rprint(f"  [cyan]⏱[/cyan]  [bold]{image_path.name}[/bold]: load=[green]{t_load:.3f}s[/green], resize=[yellow]{t_resize:.3f}s[/yellow], detect+embed=[blue]{t_detect:.3f}s[/blue], total=[bold green]{t_total:.3f}s[/bold green]")
+                rprint(f"  [cyan]⏱[/cyan]  [bold]{image_path.name}[/bold]: {t_total:.3f}s")
             
             return embedding
             
         except Exception as e:
-            print(f"Error extracting embedding from {image_path}: {e}")
-            
-            # Use fallback on error
-            if use_fallback:
-                return create_fallback_embedding(image_path)
-            
+            if verbose:
+                print(f"Error extracting embedding from {image_path}: {e}")
             return None
     
     def match_face(self, embedding: npt.NDArray[np.float64]) -> FaceMatchResult:
